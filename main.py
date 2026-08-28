@@ -13,6 +13,10 @@ import os
 import secrets
 import uuid
 import wave
+import base64
+import numpy as np
+import cv2
+import face_recognition
 from datetime import datetime
 from typing import Optional, List
 import logging
@@ -59,6 +63,10 @@ OUTPUT_DIR = str(os.getenv("OUTPUT_DIR", "./app/output"))
 MAX_TEXT_LENGTH = int(os.getenv("TTS_MAX_TEXT_LENGTH", "5000"))
 CLEANUP_INTERVAL = int(os.getenv("TTS_CLEANUP_INTERVAL", "3600"))
 
+# Face recognition configuration
+KNOWN_FACES_DIR = str(os.getenv("KNOWN_FACES_DIR", "./app/faces"))
+FACE_ALLOWED_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
+
 # Authentication configuration
 # Comma-separated list of valid API keys. If empty/unset, auth is DISABLED (dev mode).
 API_KEYS = {k.strip() for k in os.getenv("API_KEYS", os.getenv("API_KEY", "")).split(",") if k.strip()}
@@ -80,6 +88,7 @@ RATE_LIMIT_TTS = os.getenv("RATE_LIMIT_TTS", "30/minute")
 RATE_LIMIT_TTS_BATCH = os.getenv("RATE_LIMIT_TTS_BATCH", "5/minute")
 RATE_LIMIT_AUDIO = os.getenv("RATE_LIMIT_AUDIO", "120/minute")
 RATE_LIMIT_STATS = os.getenv("RATE_LIMIT_STATS", "30/minute")
+RATE_LIMIT_FACE = os.getenv("RATE_LIMIT_FACE", "30/minute")
 # Optional shared storage (e.g. "redis://host:6379"). Defaults to in-memory (per-process).
 RATE_LIMIT_STORAGE_URI = os.getenv("RATE_LIMIT_STORAGE_URI", "memory://")
 
@@ -132,6 +141,26 @@ async def require_api_key(api_key: Optional[str] = Security(api_key_header)) -> 
 
 # Ensure output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# Face recognition (registered faces loaded once at startup)
+# ---------------------------------------------------------------------------
+os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
+known_face_encodings: list = []
+known_face_names: list = []
+for _filename in sorted(os.listdir(KNOWN_FACES_DIR)):
+    if not _filename.lower().endswith(FACE_ALLOWED_EXT):
+        continue
+    try:
+        _image = face_recognition.load_image_file(os.path.join(KNOWN_FACES_DIR, _filename))
+        _encoding = face_recognition.face_encodings(_image)
+    except Exception as e:
+        logger.warning(f"Gagal memuat wajah {_filename}: {e}")
+        continue
+    if _encoding:
+        known_face_encodings.append(_encoding[0])
+        known_face_names.append(_filename.rsplit(".", 1)[0])  # Nama file = Nama siswa
+logger.info(f"{len(known_face_names)} wajah terdaftar dimuat dari {KNOWN_FACES_DIR}")
 
 # Indonesian voices configuration
 INDONESIAN_VOICES = {
@@ -284,6 +313,9 @@ class TTSResponse(BaseModel):
     voice_used: str
     file_size: Optional[int] = None
 
+class FaceVerifyRequest(BaseModel):
+    face_encoding: str  # base64 image, optionally with "data:image/...;base64," prefix
+
 class VoiceInfo(BaseModel):
     voice_id: str
     name: str
@@ -336,6 +368,7 @@ async def root():
             "health": "/health - Health check",
             "stats": "/stats - Service statistics",
             "audio": "/audio/{audio_id} - Download audio",
+            "verify_face": "/verify-face - Verify a face against registered faces",
             "docs": "/docs - API documentation"
         }
     }
@@ -598,6 +631,51 @@ async def get_stats(request: Request):
     except Exception as e:
         logger.error(f"Stats error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get statistics")
+
+@app.post("/verify-face", dependencies=[Depends(require_api_key)])
+@limiter.limit(RATE_LIMIT_FACE)
+async def verify_face(request: Request, face_request: FaceVerifyRequest):
+    """Verify a face image against the registered faces in KNOWN_FACES_DIR"""
+    try:
+        raw = face_request.face_encoding
+        b64_data = raw.split(",", 1)[1] if "," in raw else raw
+        try:
+            img_bytes = base64.b64decode(b64_data)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Base64 gambar tidak valid!")
+
+        img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        if img is None:
+            raise HTTPException(status_code=400, detail="Gambar tidak dapat diproses!")
+
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        def _recognize():
+            face_locations = face_recognition.face_locations(img)
+            face_encodings = face_recognition.face_encodings(img, face_locations)
+            for face_encoding in face_encodings:
+                matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+                if True in matches:
+                    return known_face_names[matches.index(True)]
+            return None
+
+        # face_recognition is CPU-bound/blocking, offload from the event loop
+        matched_name = await asyncio.to_thread(_recognize)
+
+        if matched_name is None:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "Wajah tidak terdeteksi atau tidak dikenali!"},
+            )
+
+        return {"status": "success", "name": matched_name}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Face verification error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
