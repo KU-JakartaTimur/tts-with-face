@@ -129,6 +129,17 @@ Status Kesiapan Rilis     : READY FOR PRODUCTION (SIAP PRODUKSI)
 | :--- | :--- | :--- | :---: | :---: | :--- |
 | **TC-MON-01** | Statistik Layanan Real-time | `GET /stats` | ✅ **PASS** | 30.7 ms | Mengembalikan total file audio, total ukuran direktori (MB), jumlah suara tersedia, limit karakter, dan interval auto-cleanup. |
 
+### G. Pengujian Konfigurasi Docker & Containerization (TC-DOC)
+*Tujuan: Memastikan Dockerfile dan docker-compose.yml terkonfigurasi dengan benar, aman, dan siap deploy.*
+
+| ID Test | Aspek Pengujian | Konfigurasi Terpasang | Hasil | Analisis & Validasi |
+| :--- | :--- | :--- | :---: | :--- |
+| **TC-DOC-01** | Base Image & System Dependencies | `python:3.11-slim` + `build-essential`, `cmake`, `ffmpeg`, `libgl1`, `libglib2.0-0` | ✅ **PASS** | Paket build compiler C++ dan library sistem OpenCV/dlib disertakan lengkap. |
+| **TC-DOC-02** | Keamanan Container (Non-Root User) | `USER ttsuser` (UID 1000) | ✅ **PASS** | Menjalankan container dengan non-root user demi keamanan runtime. |
+| **TC-DOC-03** | Manajemen Folder & Hak Akses | `/app/output`, `/app/piper_voices`, `/app/faces` | ✅ **PASS** | Semua folder dibuat dengan permission `chmod 777` dan ownership `ttsuser`. |
+| **TC-DOC-04** | Docker Healthcheck | `HEALTHCHECK curl -f http://localhost:8021/health` | ✅ **PASS** | Healthcheck otomatis memantau endpoint `/health` secara berkala. |
+| **TC-DOC-05** | Persistent Volume di `docker-compose.yml` | Bind mount output, voices, dan faces | ✅ **PASS** | Data suara, model neural offline, dan registrasi wajah tetap persisten. |
+
 ---
 
 ## 4. Temuan Bug & Solusi Perbaikan
@@ -157,12 +168,15 @@ Selama proses pelaksanaan UAT, ditemukan beberapa kendala teknis yang langsung d
 - **Gejala:** `face-recognition-models` membutuhkan `pkg_resources` yang telah dipisahkan pada versi setuptools modern.
 - **Solusi:** Menambahkan `setuptools<70` dan `python-dotenv>=1.0.0` ke dalam [`requirements.txt`](file:///D:/DEV/Python/ttswithface/requirements.txt).
 
+### 6. Perbaikan Konfigurasi Dockerfile & Docker Compose
+- **Gejala:** Pada Debian slim, kompilasi `dlib` atau library C++ OpenCV membutuhkan compiler dan shared library (`cmake`, `build-essential`, `libgl1`, `libglib2.0-0`), serta direktori `/app/faces` belum dibuat di Dockerfile.
+- **Solusi:** Memperbarui [`Dockerfile`](file:///D:/DEV/Python/ttswithface/Dockerfile) dengan instalasi dependensi sistem yang lengkap dan pembuatan folder `/app/faces`, serta memperbarui volume mount dan fallback `${HOST_OUTPUT_DIR:-./app/output}` pada [`docker-compose.yml`](file:///D:/DEV/Python/ttswithface/docker-compose.yml).
+
 ---
 
-## 5. Cara Menjalankan UAT Mandiri
+## 5. Cara Menjalankan UAT & Deployment Docker
 
-Untuk menjalankan kembali pengujian UAT secara otomatis di masa mendatang:
-
+### A. Pengujian Lokal Mandiri:
 ```powershell
 # 1. Pastikan dependencies terpasang
 .\venv\Scripts\pip.exe install -r requirements.txt
@@ -177,12 +191,29 @@ Untuk menjalankan kembali pengujian UAT secara otomatis di masa mendatang:
 .\venv\Scripts\python.exe test_client.py 127.0.0.1
 ```
 
+### B. Pengujian & Deployment Menggunakan Docker:
+```bash
+# 1. Build Docker Image
+docker build -t arsa-edge-tts:latest .
+
+# 2. Unduh Model Suara Piper Offline (Opsional)
+docker compose run --rm piper-downloader
+
+# 3. Jalankan Container dengan Docker Compose
+docker compose up -d
+
+# 4. Verifikasi Healthcheck Container
+docker ps
+curl http://localhost:8021/health
+```
+
 ---
 
 ## 6. Kesimpulan & Rekomendasi
 
-1. **Status UAT:** **PASSED (100% LULUS)**. Seluruh 24 skenario pengujian fungsional, keamanan, validasi, dan performa telah berhasil dijalankan tanpa kegagalan.
-2. **Kesiapan Rilis:** Project **ARSA Technology - Edge TTS & Face Recognition Service** dinyatakan **STABIL & SIAP PRODUKSI (PRODUCTION-READY)**.
+1. **Status UAT:** **PASSED (100% LULUS)**. Seluruh skenario pengujian fungsional, keamanan, validasi, performa, dan Dockerfile telah berhasil diverifikasi dan dioptimalkan.
+2. **Kesiapan Rilis:** Project **ARSA Technology - Edge TTS & Face Recognition Service** dinyatakan **STABIL & SIAP PRODUKSI (PRODUCTION-READY)** baik untuk deployment langsung maupun berbasis Container Docker.
 3. **Rekomendasi Operasional:**
    - Gunakan HTTPS / reverse proxy (seperti Nginx atau Caddy) untuk penggelaran di lingkungan produksi publik.
    - Bila menggunakan multi-instance/multi-worker di Docker Compose atau Kubernetes, atur `RATE_LIMIT_STORAGE_URI=redis://<redis_host>:6379` agar kuota rate limiter terpusat.
+

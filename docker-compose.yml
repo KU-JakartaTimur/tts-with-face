@@ -7,14 +7,17 @@ services:
     ports:
       - 0.0.0.0:8021:8021
     volumes:
-      - ${HOST_OUTPUT_DIR}:/app/output
+      - ${HOST_OUTPUT_DIR:-./app/output}:/app/output
       # Persist Piper voice models on the host so they survive rebuilds/restarts
       # and are shared with the piper-downloader service below.
       - ./app/piper_voices:/app/piper_voices
+      - ./app/faces:/app/faces
     environment:
       - PYTHONUNBUFFERED=1
       - TTS_MAX_TEXT_LENGTH=5000
       - TTS_CLEANUP_INTERVAL=3600
+      - OUTPUT_DIR=/app/output
+      - KNOWN_FACES_DIR=/app/faces
       # Default engine when a request omits "engine": edge or piper
       - TTS_DEFAULT_ENGINE=${TTS_DEFAULT_ENGINE:-edge}
       # Piper (local) TTS engine: where voice models live + voice id -> model mapping
