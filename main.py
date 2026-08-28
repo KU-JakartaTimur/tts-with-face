@@ -13,6 +13,7 @@ import os
 import secrets
 import uuid
 import wave
+import re
 import base64
 import numpy as np
 import cv2
@@ -148,17 +149,25 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 known_face_encodings: list = []
 known_face_names: list = []
+
+
+def _load_face_encoding(image_path: str):
+    """Load the first face encoding found in an image file, or None."""
+    image = face_recognition.load_image_file(image_path)
+    encodings = face_recognition.face_encodings(image)
+    return encodings[0] if encodings else None
+
+
 for _filename in sorted(os.listdir(KNOWN_FACES_DIR)):
     if not _filename.lower().endswith(FACE_ALLOWED_EXT):
         continue
     try:
-        _image = face_recognition.load_image_file(os.path.join(KNOWN_FACES_DIR, _filename))
-        _encoding = face_recognition.face_encodings(_image)
+        _encoding = _load_face_encoding(os.path.join(KNOWN_FACES_DIR, _filename))
     except Exception as e:
         logger.warning(f"Gagal memuat wajah {_filename}: {e}")
         continue
-    if _encoding:
-        known_face_encodings.append(_encoding[0])
+    if _encoding is not None:
+        known_face_encodings.append(_encoding)
         known_face_names.append(_filename.rsplit(".", 1)[0])  # Nama file = Nama siswa
 logger.info(f"{len(known_face_names)} wajah terdaftar dimuat dari {KNOWN_FACES_DIR}")
 
@@ -316,6 +325,10 @@ class TTSResponse(BaseModel):
 class FaceVerifyRequest(BaseModel):
     face_encoding: str  # base64 image, optionally with "data:image/...;base64," prefix
 
+class FaceCaptureRequest(BaseModel):
+    name: str  # nama siswa, dipakai sebagai nama file
+    face_encoding: str  # base64 image, optionally with "data:image/...;base64," prefix
+
 class VoiceInfo(BaseModel):
     voice_id: str
     name: str
@@ -339,6 +352,19 @@ def get_voice_name(voice: str, language: str) -> str:
         return ENGLISH_VOICES.get(voice, ENGLISH_VOICES["female_us"])["name"]
     else:
         return INDONESIAN_VOICES.get(voice, INDONESIAN_VOICES["female"])["name"]
+
+def decode_base64_image(raw: str):
+    """Decode a base64 (optionally data-URI prefixed) image string to a BGR OpenCV image."""
+    b64_data = raw.split(",", 1)[1] if "," in raw else raw
+    try:
+        img_bytes = base64.b64decode(b64_data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Base64 gambar tidak valid!")
+    img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(status_code=400, detail="Gambar tidak dapat diproses!")
+    return img
 
 async def cleanup_old_files():
     """Clean up audio files older than cleanup interval"""
@@ -369,6 +395,7 @@ async def root():
             "stats": "/stats - Service statistics",
             "audio": "/audio/{audio_id} - Download audio",
             "verify_face": "/verify-face - Verify a face against registered faces",
+            "capture_face": "/capture-face - Register a new face",
             "docs": "/docs - API documentation"
         }
     }
@@ -637,18 +664,7 @@ async def get_stats(request: Request):
 async def verify_face(request: Request, face_request: FaceVerifyRequest):
     """Verify a face image against the registered faces in KNOWN_FACES_DIR"""
     try:
-        raw = face_request.face_encoding
-        b64_data = raw.split(",", 1)[1] if "," in raw else raw
-        try:
-            img_bytes = base64.b64decode(b64_data)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Base64 gambar tidak valid!")
-
-        img_array = np.frombuffer(img_bytes, dtype=np.uint8)
-        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-        if img is None:
-            raise HTTPException(status_code=400, detail="Gambar tidak dapat diproses!")
-
+        img = decode_base64_image(face_request.face_encoding)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         def _recognize():
@@ -675,6 +691,53 @@ async def verify_face(request: Request, face_request: FaceVerifyRequest):
         raise
     except Exception as e:
         logger.error(f"Face verification error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/capture-face", dependencies=[Depends(require_api_key)])
+@limiter.limit(RATE_LIMIT_FACE)
+async def capture_face(request: Request, capture_request: FaceCaptureRequest):
+    """Register a new face: save the image to KNOWN_FACES_DIR and index its encoding."""
+    try:
+        name = capture_request.name.strip()
+        if not name or not re.fullmatch(r"[\w\- ]+", name):
+            raise HTTPException(
+                status_code=400,
+                detail="Nama tidak valid. Hanya boleh huruf, angka, spasi, - dan _.",
+            )
+
+        img = decode_base64_image(capture_request.face_encoding)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        def _encode_face():
+            encodings = face_recognition.face_encodings(img_rgb)
+            return encodings[0] if encodings else None
+
+        # face_recognition is CPU-bound/blocking, offload from the event loop
+        encoding = await asyncio.to_thread(_encode_face)
+        if encoding is None:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "Wajah tidak terdeteksi pada gambar!"},
+            )
+
+        filename = f"{name}.jpg"
+        file_path = os.path.join(KNOWN_FACES_DIR, filename)
+        cv2.imwrite(file_path, img)
+
+        # Update in-memory index; replace existing entry with the same name
+        if name in known_face_names:
+            known_face_encodings[known_face_names.index(name)] = encoding
+        else:
+            known_face_names.append(name)
+            known_face_encodings.append(encoding)
+
+        logger.info(f"Registered face '{name}' ({len(known_face_names)} total)")
+        return {"status": "success", "name": name, "file": filename}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Face capture error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
