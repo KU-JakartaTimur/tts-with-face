@@ -1,0 +1,226 @@
+{
+  "timestamp": "2026-08-28 15:29:00",
+  "target": "http://127.0.0.1:8021",
+  "total": 24,
+  "passed": 24,
+  "failed": 0,
+  "pass_rate": 100.0,
+  "results": [
+    {
+      "id": "TC-PUB-01",
+      "category": "Public Endpoints",
+      "name": "Root info endpoint (GET /)",
+      "passed": true,
+      "status_code": 200,
+      "details": "{'service': 'ARSA Technology Edge-TTS API', 'version': '1.0.0', 'status': 'running', 'supported_languages': ['Indonesian', 'English'], 'endpoints': {'tts': '/tts - Generate speech', 'voices': '/voices - List available voices', 'health': '/health - Health check', 'stats': '/stats - Service statistics', 'audio': '/audio/{audio_id} - Download audio', 'verify_face': '/verify-face - Verify a face against registered faces', 'capture_face': '/capture-face - Register a new face', 'docs': '/docs - API documentation'}}",
+      "duration_ms": 11.03973388671875
+    },
+    {
+      "id": "TC-PUB-02",
+      "category": "Public Endpoints",
+      "name": "Health check with auth status (GET /health)",
+      "passed": true,
+      "status_code": 200,
+      "details": "{'status': 'healthy', 'timestamp': '2026-08-28T15:28:51.881410', 'service': 'edge-tts-api', 'output_dir_writable': True, 'auth_enabled': True, 'engines': {'edge': True, 'piper': True}}",
+      "duration_ms": 4.201173782348633
+    },
+    {
+      "id": "TC-PUB-03",
+      "category": "Public Endpoints",
+      "name": "Voice listing (GET /voices)",
+      "passed": true,
+      "status_code": 200,
+      "details": "7 voices: ['female', 'male', 'female_us', 'male_us', 'id_female', 'en_female', 'en_male']",
+      "duration_ms": 5.249738693237305
+    },
+    {
+      "id": "TC-PUB-04",
+      "category": "Public Endpoints",
+      "name": "OpenAPI schema (GET /openapi.json)",
+      "passed": true,
+      "status_code": 200,
+      "details": "9 endpoints documented",
+      "duration_ms": 28.038501739501953
+    },
+    {
+      "id": "TC-SEC-01",
+      "category": "Security & Auth",
+      "name": "Protected route without API Key returns 401 Unauthorized",
+      "passed": true,
+      "status_code": 401,
+      "details": "{\"detail\":\"Missing API key. Provide it via 'X-API-Key' header.\"}",
+      "duration_ms": 25.270700454711914
+    },
+    {
+      "id": "TC-SEC-02",
+      "category": "Security & Auth",
+      "name": "Protected route with invalid API Key returns 403 Forbidden",
+      "passed": true,
+      "status_code": 403,
+      "details": "{\"detail\":\"Invalid API key.\"}",
+      "duration_ms": 29.555320739746094
+    },
+    {
+      "id": "TC-SEC-03",
+      "category": "Security & Auth",
+      "name": "Protected route with valid API Key returns 200 OK",
+      "passed": true,
+      "status_code": 200,
+      "details": "Audio ID: 44352d95-566c-4e5f-bf99-a60824ee55ec",
+      "duration_ms": 733.6161136627197
+    },
+    {
+      "id": "TC-SEC-04",
+      "category": "Security & Auth",
+      "name": "Rate limit headers presence",
+      "passed": true,
+      "status_code": 200,
+      "details": "{'x-ratelimit-limit': '30', 'x-ratelimit-remaining': '29', 'x-ratelimit-reset': '1787905793.72762'}",
+      "duration_ms": 24.569988250732422
+    },
+    {
+      "id": "TC-TTS-01",
+      "category": "TTS Engine",
+      "name": "Indonesian Female Voice - WAV format",
+      "passed": true,
+      "status_code": 200,
+      "details": "Voice: id-ID-GadisNeural, Size: 49824B",
+      "duration_ms": 691.4165019989014
+    },
+    {
+      "id": "TC-TTS-02",
+      "category": "TTS Engine",
+      "name": "Indonesian Male Voice - MP3 format",
+      "passed": true,
+      "status_code": 200,
+      "details": "Voice: id-ID-ArdiNeural, Size: 30528B",
+      "duration_ms": 681.0693740844727
+    },
+    {
+      "id": "TC-TTS-03",
+      "category": "TTS Engine",
+      "name": "English Voice with Custom Pitch & Rate",
+      "passed": true,
+      "status_code": 200,
+      "details": "Voice: en-US-AriaNeural, Size: 28080B",
+      "duration_ms": 714.8566246032715
+    },
+    {
+      "id": "TC-TTS-04",
+      "category": "TTS Engine",
+      "name": "Piper Offline Neural Engine (Local WAV)",
+      "passed": true,
+      "status_code": 200,
+      "details": "Voice: en_US-lessac-medium, Size: 182316B",
+      "duration_ms": 1432.9960346221924
+    },
+    {
+      "id": "TC-TTS-05",
+      "category": "TTS Engine",
+      "name": "Batch TTS Processing (3 requests)",
+      "passed": true,
+      "status_code": 200,
+      "details": "Successful: 3/3",
+      "duration_ms": 1842.3972129821777
+    },
+    {
+      "id": "TC-TTS-06",
+      "category": "TTS Engine",
+      "name": "Audio Download Endpoint (GET /audio/{id})",
+      "passed": true,
+      "status_code": 200,
+      "details": "Downloaded 49824 bytes, Content-Type: audio/wav",
+      "duration_ms": 30.301332473754883
+    },
+    {
+      "id": "TC-FACE-01",
+      "category": "Face Recognition",
+      "name": "Register face image (/capture-face)",
+      "passed": true,
+      "status_code": 200,
+      "details": "{'status': 'success', 'name': 'Budi_Santoso', 'file': 'Budi_Santoso.jpg'}",
+      "duration_ms": 862.1752262115479
+    },
+    {
+      "id": "TC-FACE-02",
+      "category": "Face Recognition",
+      "name": "Verify registered face correctly identifies person",
+      "passed": true,
+      "status_code": 200,
+      "details": "{'status': 'success', 'name': 'Budi_Santoso'}",
+      "duration_ms": 874.584436416626
+    },
+    {
+      "id": "TC-FACE-03",
+      "category": "Face Recognition",
+      "name": "Verify unregistered face returns 400 Not Recognized",
+      "passed": true,
+      "status_code": 400,
+      "details": "{'status': 'error', 'message': 'Wajah tidak terdeteksi atau tidak dikenali!'}",
+      "duration_ms": 531.9700241088867
+    },
+    {
+      "id": "TC-FACE-04",
+      "category": "Face Recognition",
+      "name": "Capture face with corrupt base64 returns 400",
+      "passed": true,
+      "status_code": 400,
+      "details": "{\"detail\":\"Base64 gambar tidak valid!\"}",
+      "duration_ms": 26.52573585510254
+    },
+    {
+      "id": "TC-FACE-05",
+      "category": "Face Recognition",
+      "name": "Capture face with illegal characters in name returns 400",
+      "passed": true,
+      "status_code": 400,
+      "details": "{\"detail\":\"Nama tidak valid. Hanya boleh huruf, angka, spasi, - dan _.\"}",
+      "duration_ms": 5.850791931152344
+    },
+    {
+      "id": "TC-VAL-01",
+      "category": "Input Validation",
+      "name": "TTS request with empty text returns 400",
+      "passed": true,
+      "status_code": 400,
+      "details": "{\"detail\":\"Text cannot be empty\"}",
+      "duration_ms": 25.98738670349121
+    },
+    {
+      "id": "TC-VAL-02",
+      "category": "Input Validation",
+      "name": "TTS request exceeding max length (>5000 chars) returns 400",
+      "passed": true,
+      "status_code": 400,
+      "details": "{\"detail\":\"Text too long (max 5000 characters)\"}",
+      "duration_ms": 5.310773849487305
+    },
+    {
+      "id": "TC-VAL-03",
+      "category": "Input Validation",
+      "name": "Batch TTS exceeding 10 items returns 400",
+      "passed": true,
+      "status_code": 400,
+      "details": "{\"detail\":\"Maximum 10 requests per batch\"}",
+      "duration_ms": 23.178815841674805
+    },
+    {
+      "id": "TC-VAL-04",
+      "category": "Input Validation",
+      "name": "Non-existent audio download returns 404 Not Found",
+      "passed": true,
+      "status_code": 404,
+      "details": "{\"detail\":\"Audio file not found\"}",
+      "duration_ms": 29.68454360961914
+    },
+    {
+      "id": "TC-MON-01",
+      "category": "Monitoring & Stats",
+      "name": "Service stats endpoint (GET /stats)",
+      "passed": true,
+      "status_code": 200,
+      "details": "{'total_audio_files': 25, 'total_size_bytes': 742620, 'total_size_mb': 0.71, 'available_voices': 4, 'supported_languages': ['Indonesian', 'English'], 'max_text_length': 5000, 'cleanup_interval_hours': 1.0, 'output_directory': './app/output'}",
+      "duration_ms": 30.741214752197266
+    }
+  ]
+}
