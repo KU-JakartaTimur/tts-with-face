@@ -1,5 +1,30 @@
+# Virtual environment
 venv/
-app/
-*.wav
+.venv/
+
+# Environment variables
 .env
-__pycache__/*
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+src/__pycache__/*
+src/core/__pycache__/*
+src/core/__init__.py
+src/models/__pycache__/*
+src/routers/__pycache__/*
+src/services/__pycache__/*
+
+
+# App output & storage
+app/faces/*
+app/output/*
+app/piper_voices/*
+
+*.wav
+*.mp3
+
+# Testing & logs
+.pytest_cache/
+*.log
