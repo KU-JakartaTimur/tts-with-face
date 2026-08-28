@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Security, status
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Security, status, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,9 @@ from datetime import datetime
 from typing import Optional, List
 import logging
 import aiofiles
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Piper TTS is an optional, fully-local neural TTS engine. The import is guarded so
 # the API still runs (with only the Edge engine) when piper-tts isn't installed or no
@@ -287,7 +290,10 @@ def synthesize_piper(text: str, voice: str, output_file: str) -> None:
     """Synthesize `text` to a WAV file at `output_file` using Piper (blocking)."""
     piper_voice = get_piper_voice(voice)
     with wave.open(output_file, "wb") as wav_file:
-        piper_voice.synthesize(text, wav_file)
+        if hasattr(piper_voice, "synthesize_wav"):
+            piper_voice.synthesize_wav(text, wav_file)
+        else:
+            piper_voice.synthesize(text, wav_file)
 
 # Pydantic models
 class TTSRequest(BaseModel):
@@ -455,7 +461,7 @@ async def list_voices():
 
 @app.post("/tts", response_model=TTSResponse, dependencies=[Depends(require_api_key)])
 @limiter.limit(RATE_LIMIT_TTS)
-async def generate_speech(request: Request, tts_request: TTSRequest, background_tasks: BackgroundTasks):
+async def generate_speech(request: Request, response: Response, tts_request: TTSRequest, background_tasks: BackgroundTasks):
     """Generate speech from text"""
     try:
         # Validate input
@@ -534,7 +540,7 @@ async def generate_speech(request: Request, tts_request: TTSRequest, background_
 
 @app.get("/audio/{audio_id}", dependencies=[Depends(require_api_key)])
 @limiter.limit(RATE_LIMIT_AUDIO)
-async def download_audio(request: Request, audio_id: str):
+async def download_audio(request: Request, response: Response, audio_id: str):
     """Download generated audio file"""
     try:
         for ext, media_type in (("wav", "audio/wav"), ("mp3", "audio/mpeg")):
@@ -556,7 +562,7 @@ async def download_audio(request: Request, audio_id: str):
 
 @app.post("/tts/batch", dependencies=[Depends(require_api_key)])
 @limiter.limit(RATE_LIMIT_TTS_BATCH)
-async def generate_batch_speech(request: Request, requests: List[TTSRequest], background_tasks: BackgroundTasks):
+async def generate_batch_speech(request: Request, response: Response, requests: List[TTSRequest], background_tasks: BackgroundTasks):
     """Generate multiple speech files in batch"""
     try:
         if len(requests) > 10:
@@ -630,7 +636,7 @@ async def generate_batch_speech(request: Request, requests: List[TTSRequest], ba
 
 @app.get("/stats", dependencies=[Depends(require_api_key)])
 @limiter.limit(RATE_LIMIT_STATS)
-async def get_stats(request: Request):
+async def get_stats(request: Request, response: Response):
     """Get service statistics"""
     try:
         # Count files in output directory
@@ -661,7 +667,7 @@ async def get_stats(request: Request):
 
 @app.post("/verify-face", dependencies=[Depends(require_api_key)])
 @limiter.limit(RATE_LIMIT_FACE)
-async def verify_face(request: Request, face_request: FaceVerifyRequest):
+async def verify_face(request: Request, response: Response, face_request: FaceVerifyRequest):
     """Verify a face image against the registered faces in KNOWN_FACES_DIR"""
     try:
         img = decode_base64_image(face_request.face_encoding)
@@ -695,7 +701,7 @@ async def verify_face(request: Request, face_request: FaceVerifyRequest):
 
 @app.post("/capture-face", dependencies=[Depends(require_api_key)])
 @limiter.limit(RATE_LIMIT_FACE)
-async def capture_face(request: Request, capture_request: FaceCaptureRequest):
+async def capture_face(request: Request, response: Response, capture_request: FaceCaptureRequest):
     """Register a new face: save the image to KNOWN_FACES_DIR and index its encoding."""
     try:
         name = capture_request.name.strip()
