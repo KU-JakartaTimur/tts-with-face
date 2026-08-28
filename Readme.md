@@ -23,6 +23,7 @@ Perfect for content creators, developers, and businesses needing high-quality In
 🏥 **Health Monitoring** - Built-in health checks and status monitoring  
 🔑 **API Key Authentication** - Production-ready auth via `X-API-Key` header (single or multi-key)  
 🛡️ **Rate Limiting** - Per-route quotas keyed by API key (fallback to IP), backed by in-memory or Redis  
+🧑‍🤝‍🧑 **Face Recognition** - Register and verify faces (`/capture-face`, `/verify-face`)  
 
 ## 🎯 Use Cases
 
@@ -38,8 +39,8 @@ Perfect for content creators, developers, and businesses needing high-quality In
 ### Option 1: Docker Compose (Recommended)
 
 ```bash
-git clone https://github.com/arsa-technology/edge-tts-api.git
-cd edge-tts-api
+git clone https://github.com/KU-JakartaTimur/tts-with-face
+cd tts-with-face
 docker-compose up -d
 ```
 
@@ -50,14 +51,14 @@ docker run -d \
   --name arsa-edge-tts \
   -p 8021:8021 \
   -v $(pwd)/output:/app/output \
-  arsa/edge-tts-api:latest
+  arsa/tts-with-face:latest
 ```
 
 ### Option 3: Local Development
 
 ```bash
-git clone https://github.com/arsa-technology/edge-tts-api.git
-cd edge-tts-api
+git clone https://github.com/KU-JakartaTimur/tts-with-face
+cd tts-with-face
 pip install -r requirements.txt
 python main.py
 ```
@@ -140,6 +141,22 @@ curl -X POST http://localhost:8021/tts/batch \
       "language": "english"
     }
   ]'
+```
+
+### Face Registration & Verification
+
+```bash
+# Register a new face (base64 image, with or without data-URI prefix)
+curl -X POST http://localhost:8021/capture-face \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"name": "budi", "face_encoding": "'"$(base64 -w0 budi.jpg)"'"}'
+
+# Verify a face against registered faces
+curl -X POST http://localhost:8021/verify-face \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"face_encoding": "'"$(base64 -w0 unknown.jpg)"'"}'
 ```
 
 ### Python Integration
@@ -229,7 +246,7 @@ Authentication is **opt-in via environment variable**:
 - Leave both empty → auth **disabled** (development mode; a warning is logged on startup).
 
 Public endpoints (no key required): `GET /`, `GET /health`, `GET /voices`, `/docs`, `/redoc`.
-Protected endpoints (key required): `POST /tts`, `POST /tts/batch`, `GET /audio/{id}`, `GET /stats`.
+Protected endpoints (key required): `POST /tts`, `POST /tts/batch`, `GET /audio/{id}`, `GET /stats`, `POST /verify-face`, `POST /capture-face`.
 
 **Enable for production:**
 
@@ -285,6 +302,7 @@ All routes are rate-limited via [slowapi](https://github.com/laurentS/slowapi). 
 | `POST /tts/batch` | `RATE_LIMIT_TTS_BATCH` | `5/minute` |
 | `GET /audio/{id}` | `RATE_LIMIT_AUDIO` | `120/minute` |
 | `GET /stats` | `RATE_LIMIT_STATS` | `30/minute` |
+| `POST /verify-face`, `POST /capture-face` | `RATE_LIMIT_FACE` | `30/minute` |
 
 Every response includes:
 
@@ -323,7 +341,9 @@ RATE_LIMIT_STORAGE_URI=redis://redis:6379
 | `RATE_LIMIT_TTS_BATCH` | `5/minute` | Limit for `POST /tts/batch` |
 | `RATE_LIMIT_AUDIO` | `120/minute` | Limit for `GET /audio/{id}` |
 | `RATE_LIMIT_STATS` | `30/minute` | Limit for `GET /stats` |
+| `RATE_LIMIT_FACE` | `30/minute` | Limit for `POST /verify-face` and `POST /capture-face` |
 | `RATE_LIMIT_STORAGE_URI` | `memory://` | Storage for limiter; use `redis://host:6379` for multi-replica setups |
+| `KNOWN_FACES_DIR` | `./app/faces` | Folder storing registered face images (filename = person name) |
 
 > See [`.env.example`](.env.example) for a ready-to-copy template.
 
@@ -366,6 +386,8 @@ services:
 | `/tts/batch` | POST | Generate multiple audios |
 | `/audio/{audio_id}` | GET | Download audio file |
 | `/stats` | GET | Service statistics |
+| `/verify-face` | POST | Verify a face against registered faces |
+| `/capture-face` | POST | Register a new face |
 | `/docs` | GET | Interactive API documentation |
 
 ## 🧪 Testing
@@ -416,7 +438,7 @@ Source: 0.0.0.0/0 (or specific IPs)
 
 **Google Cloud Firewall:**
 ```bash
-gcloud compute firewall-rules create edge-tts-api \
+gcloud compute firewall-rules create tts-with-face \
   --allow tcp:8021 \
   --source-ranges 0.0.0.0/0
 ```
@@ -474,8 +496,8 @@ edge-tts-service/
 
 ```bash
 # Clone repository
-git clone https://github.com/arsa-technology/edge-tts-api.git
-cd edge-tts-api
+git clone https://github.com/KU-JakartaTimur/tts-with-face
+cd tts-with-face
 
 # Create virtual environment
 python -m venv venv
@@ -534,8 +556,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Get Help
 - 📖 **Documentation**: [API Docs](http://localhost:8021/docs)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/arsa-technology/edge-tts-api/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/arsa-technology/edge-tts-api/discussions)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/arsa-technology/tts-with-face/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/arsa-technology/tts-with-face/discussions)
 
 ### Commercial Support
 For enterprise support, custom development, or consulting services:
